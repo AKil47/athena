@@ -1,0 +1,47 @@
+{
+  "name": "electron-browser",
+  "version": "0.1.0",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "dev": "concurrently \"next dev\" \"npm run electron-dev\"",
+    "build": "next build && electron-builder",
+    "start": "next start",
+    "lint": "next lint",
+    "electron-dev": "wait-on http://localhost:3000 && electron .",
+    "electron-pack": "electron-builder -c.extraMetadata.main=main.js",
+    "preelectron-pack": "next build"
+  },
+  "build": {
+    "appId": "com.electron.browser",
+    "files": [
+      "*.js",
+      "build",
+      "node_modules"
+    ],
+    "directories": {
+      "buildResources": "assets"
+    }
+  },
+  "dependencies": {
+    "@shadcn/ui": "^0.0.4",
+    "electron-is-dev": "^2.0.0",
+    "lucide-react": "^0.475.0",
+    "next": "15.1.7",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/electron": "^1.6.10",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "concurrently": "^8.2.2",
+    "electron": "^29.1.0",
+    "electron-builder": "^24.13.3",
+    "postcss": "^8",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5",
+    "wait-on": "^7.2.0"
+  }
+}
