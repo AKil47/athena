@@ -1,8 +1,10 @@
+'use client'
+
 import Browser from "@/components/browser"
 
 export default function Home() {
   return (
-    <main>
+    <main className="min-h-screen">
       <Browser />
     </main>
   )
