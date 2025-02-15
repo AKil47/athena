@@ -1,8 +1,8 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
-import * as path from 'path';
-import * as isDev from 'electron-is-dev';
+const { app, BrowserWindow, ipcMain } = require('electron')
+const path = require('path')
+const isDev = require('electron-is-dev')
 
-let mainWindow: BrowserWindow | null = null;
+let mainWindow = null
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -13,44 +13,44 @@ function createWindow() {
       contextIsolation: false,
       webviewTag: true,
     }
-  });
+  })
 
   // Load the Next.js app
   mainWindow.loadURL(
     isDev
       ? 'http://localhost:3000'
       : `file://${path.join(__dirname, '../build/index.html')}`
-  );
+  )
 
   if (isDev) {
-    mainWindow.webContents.openDevTools();
+    mainWindow.webContents.openDevTools()
   }
 
   mainWindow.on('closed', () => {
-    mainWindow = null;
-  });
+    mainWindow = null
+  })
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(createWindow)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
-    app.quit();
+    app.quit()
   }
-});
+})
 
 app.on('activate', () => {
   if (mainWindow === null) {
-    createWindow();
+    createWindow()
   }
-});
+})
 
 // Handle navigation events
-ipcMain.on('navigate', (_event, url: string) => {
+ipcMain.on('navigate', (_event, url) => {
   if (mainWindow) {
-    mainWindow.webContents.loadURL(url);
+    mainWindow.webContents.loadURL(url)
   }
-});
+})
 
 // Handle navigation state
 ipcMain.on('get-nav-state', (event) => {
@@ -58,6 +58,6 @@ ipcMain.on('get-nav-state', (event) => {
     event.reply('navigation-state', {
       canGoBack: mainWindow.webContents.canGoBack(),
       canGoForward: mainWindow.webContents.canGoForward()
-    });
+    })
   }
-});
+})

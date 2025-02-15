@@ -112,17 +112,17 @@ export default function Browser() {
     <div className="flex h-screen bg-background">
       {/* Sidebar */}
       <div className="w-16 bg-gray-100 border-r flex flex-col items-center py-4 gap-4">
-        <Button variant="ghost" size="icon" className="rounded-full bg-blue-500 text-white">
+        <Button variant="ghost" size="icon" className="rounded-full bg-blue-500 text-white" onClick={undefined}>
           <Home className="h-5 w-5" />
         </Button>
-        <Button variant="ghost" size="icon" className="rounded-full">
+        <Button variant="ghost" size="icon" className="rounded-full" onClick={undefined}>
           <Search className="h-5 w-5" />
         </Button>
-        <Button variant="ghost" size="icon" className="rounded-full">
+        <Button variant="ghost" size="icon" className="rounded-full" onClick={undefined}>
           <Bookmark className="h-5 w-5" />
         </Button>
         <Separator className="my-2" />
-        <Button variant="ghost" size="icon" className="rounded-full mt-auto">
+        <Button variant="ghost" size="icon" className="rounded-full mt-auto" onClick={undefined}>
           <Settings className="h-5 w-5" />
         </Button>
       </div>
@@ -161,7 +161,7 @@ export default function Browser() {
           <Button variant="ghost" size="icon" className="shrink-0" onClick={() => setIsSplitView(!isSplitView)}>
             <Layout className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" className="shrink-0">
+          <Button variant="ghost" size="icon" className="shrink-0" onClick={undefined}>
             <Plus className="h-4 w-4" />
           </Button>
         </div>
@@ -169,7 +169,7 @@ export default function Browser() {
         {/* Main Content */}
         <div className={`flex-1 ${isSplitView ? "grid grid-cols-2 divide-x" : ""}`}>
           <div className="h-full">
-            {typeof window !== 'undefined' && window.require ? (
+            {typeof window !== 'undefined' && window.require('electron') ? (
               <webview
                 id="mainWebview"
                 src={url}
@@ -188,7 +188,7 @@ export default function Browser() {
           </div>
           {isSplitView && (
             <div className="h-full">
-              {typeof window !== 'undefined' && window.require ? (
+              {typeof window !== 'undefined' && window.require('electron') ? (
                 <webview
                   id="splitWebview"
                   className="w-full h-full"
