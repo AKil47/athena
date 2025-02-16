@@ -143,29 +143,6 @@ export default function BrowserWindow() {
     }
   }
 
-  const updateRelevancyScore = async (tabId: string) => {
-    try {
-      const result = await window.electron.getPageContent()
-      if (result.success && result.data) {
-        const { url, title, content } = result.data
-        const score = await relevancyEngine.get_relevancy_score(
-          userGoal,
-          url,
-          title,
-          content,
-          relevancyEngine.previousRelevancyScores
-        )
-
-        setTabs(currentTabs =>
-          currentTabs.map(tab =>
-            tab.id === tabId ? { ...tab, relevancyScore: score } : tab
-          )
-        )
-      }
-    } catch (error) {
-      console.error('Error updating relevancy score:', error)
-    }
-  }
 
   const navigateToUrl = async (url: string) => {
     if (!activeTab) return
@@ -347,13 +324,6 @@ export default function BrowserWindow() {
       return parsedUrl.hostname
     } catch {
       return url
-    }
-  }
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (searchInput) {
-      navigateToUrl(searchInput)
     }
   }
 
