@@ -17,15 +17,16 @@ import { TooltipProvider, TooltipRoot, TooltipTrigger, TooltipContent } from "@/
 declare global {
   interface Window {
     electron: {
+      removeBrowserView: () => Promise<void>,
       navigateToUrl: (url: string) => Promise<{ success: boolean; title?: string; error?: string }>,
-      resizeBrowserView: (bounds: { x: number; y: number; width: number; height: number }) => void,
       initializeBrowser: () => Promise<{ success: boolean }>,
       createTab: (id: string) => Promise<{ success: boolean; error?: string }>,
       switchTab: (id: string) => Promise<{ success: boolean; error?: string }>,
       closeTab: (id: string) => Promise<{ success: boolean; error?: string }>,
       onTitleUpdate: (callback: ({ viewId, title }: { viewId: string; title: string }) => void) => void,
       getPageContent: (id: string) => Promise<{ success: boolean; data?: { url: string; title: string; content: string }; error?: string }>,
-      onNavigate: (callback: ({ viewId, url }: { viewId: string; url: string }) => void) => void
+      onNavigate: (callback: ({ viewId, url }: { viewId: string; url: string }) => void) => void,
+      resizeBrowserView: (options: { x: number; y: number; width: number; height: number }) => Promise<void>
     }
   }
 }
@@ -398,11 +399,11 @@ export default function BrowserWindow() {
 
   const truncateTitle = (title: string, maxLength: number) => {
     if (title.length <= maxLength) return title;
-    return title.slice(0, maxLength) + '...';
+    return title.slice(0, maxLength) + "...";
   }
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-background">
+    <div className="flex h-screen w-full overflow-hidden bg-indigo-950">
       {/* Left Sidebar */}
       <div className="w-20 glass flex flex-col items-center py-6 gap-6 border-r border-white/10">
         <Button
@@ -502,7 +503,7 @@ export default function BrowserWindow() {
                     ${tab.isActive ? "bg-white/10" : "hover:bg-white/5"}`}
                   onClick={() => switchTab(tab)}
                 >
-                  <div className="flex items-center flex-1 min-w-0 pl-2">
+                  <div className="flex items-center flex-1 min-w-0">
                     {tab.favicon ? (
                       <img
                         src={tab.favicon}
@@ -517,8 +518,8 @@ export default function BrowserWindow() {
                       <Globe className="h-4 w-4 shrink-0 mr-3 text-muted-foreground" />
                     )}
                     <div className="truncate">
-                      <div className="font-medium">
-                        {truncateTitle(tab.title, 17)} {/* Adjust the maxLength as needed */}
+                      <div className="font-medium truncate">
+                        {truncateTitle(tab.title, 20)}
                         {tab.relevancyScore !== undefined && (
                           <TooltipProvider>
                             <TooltipRoot>

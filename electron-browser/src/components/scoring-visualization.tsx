@@ -5,19 +5,16 @@ import { useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { useEffect } from "react"
 
+
 interface ScoringVisualizationProps {
   scores: number[]
   onClose: () => void
 }
 
-interface ElectronWindow {
-  electron?: {
-    closeWindow?: () => Promise<{ success: boolean; error?: string }>
-    [key: string]: any
-  }
+interface ScoringVisualizationProps {
+  scores: number[]
+  onClose: () => void
 }
-
-declare const window: ElectronWindow
 
 export default function ScoringVisualization({ scores, onClose }: ScoringVisualizationProps) {
   const width = 1200
@@ -31,12 +28,54 @@ export default function ScoringVisualization({ scores, onClose }: ScoringVisuali
   const getPathPoints = () => {
     return normalizedScores.map((score, i) => {
       const x = padding + (i * graphWidth) / Math.max(1, scores.length - 1)
-      // Adjust Y calculation to properly scale scores
       const y = height - (padding + (score * (height - padding * 2)) / 10)
       return { x, y }
     })
   }
-  
+
+  const handleClose = useCallback(async () => {
+    try {
+      onClose()
+    } catch (error) {
+      console.error('Error in handleClose:', error)
+      onClose()
+    }
+  }, [onClose])
+
+  useEffect(() => {
+    const hideBrowserView = async () => {
+      if (window.electron) {
+        try {
+          // Hide the browser view immediately when component mounts
+          await window.electron.resizeBrowserView({
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0
+          })
+        } catch (error) {
+          console.error('Error hiding browser view:', error)
+        }
+      }
+    }
+
+    hideBrowserView()
+
+    // No cleanup needed since the window will be closed
+  }, [])
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleClose()
+      }
+    }
+    window.addEventListener('keydown', handleEscape)
+    return () => window.removeEventListener('keydown', handleEscape)
+  }, [handleClose])
+
+
+
   useEffect(() => {
     console.log("ScoringVisualization mounted with scores:", scores)
   }, [scores])
@@ -91,15 +130,14 @@ export default function ScoringVisualization({ scores, onClose }: ScoringVisuali
 
   const animationPoints = generateAnimationPoints()
 
-  const handleClose = useCallback(async () => {
-    console.log("Close button clicked in ScoringVisualization")
-    onClose()
-  }, [onClose])
 
   return (
     <AnimatePresence>
-      <div 
-        className="fixed inset-0 z-50 flex items-center justify-center bg-background/90 backdrop-blur"
+      <div
+        className="fixed inset-0 z-[9999] 
+  flex items-center justify-center 
+  bg-indigo-950
+  transition-opacity duration-300"
         onClick={(e) => {
           console.log("Clicked container, target:", e.target)
           console.log("Current target:", e.currentTarget)
@@ -115,7 +153,7 @@ export default function ScoringVisualization({ scores, onClose }: ScoringVisuali
             e.stopPropagation()
           }}
         >
-          <h2 className="text-2xl font-bold mb-6 text-center">Your Focus Journey</h2>
+          <h2 className="text-2xl font-bold mb-6 text-center">Your Focus Scores for today!</h2>
 
           <div className="relative w-full h-[600px]">
             <svg width={width} height={height} className="w-full">
@@ -220,12 +258,12 @@ export default function ScoringVisualization({ scores, onClose }: ScoringVisuali
                 </span>
               )}
             </p>
-            <Button 
+            <Button
               onClick={(e) => {
                 console.log("Button clicked")
                 e.stopPropagation()
                 handleClose()
-              }} 
+              }}
               className="rounded-xl relative z-[100]"
             >
               Close Browser

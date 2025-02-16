@@ -32,10 +32,6 @@ const createBrowserView = () => {
   view.webContents.setZoomFactor(1.0)
   view.webContents.setVisualZoomLevelLimits(1, 1)
   view.setAutoResize({ width: true, height: true })
-  // This is the key change - set the browser view to a specific z-index
-  mainWindow.webContents.executeJavaScript(`
-    document.querySelector('webview').style.zIndex = '1';
-  `)
   return view
 }
 
@@ -57,7 +53,6 @@ function createWindow() {
     backgroundColor: '#1a1a1a'
   })
 
-  // Create initial browser view
   browserView = createBrowserView()
   browserViews.set('1', browserView)
 
@@ -65,31 +60,17 @@ function createWindow() {
     ? 'http://localhost:3000' 
     : `file://${path.join(__dirname, '../build/index.html')}`
   
-  console.log('Loading application from:', startUrl)
   mainWindow.loadURL(startUrl)
 
   if (isDev) {
     mainWindow.webContents.openDevTools()
   }
 
-  mainWindow.webContents.on('did-finish-load', () => {
-    console.log('Main window loaded')
-  })
-
-  mainWindow.on('closed', () => {
-    mainWindow = null
-    browserView = null
-    browserViews.clear()
-  })
-
-  // Add this after creating the browserView
   browserView.webContents.on('did-navigate', (event, url) => {
-    // Get the active view's ID
     const activeViewId = Array.from(browserViews.entries())
       .find(([_, view]) => view === browserView)?.[0]
     
     if (activeViewId) {
-      // Send the navigation event to the renderer
       mainWindow.webContents.send('page-navigated', {
         viewId: activeViewId,
         url: url
@@ -98,19 +79,17 @@ function createWindow() {
   })
 }
 
-app.whenReady().then(() => {
-  createWindow()
-  
-  app.on('activate', () => {
-    if (!mainWindow) {
-      createWindow()
-    }
-  })
-})
+app.whenReady().then(createWindow)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
+  }
+})
+
+app.on('activate', () => {
+  if (!mainWindow) {
+    createWindow()
   }
 })
 
@@ -120,6 +99,10 @@ ipcMain.handle('closeWindow', () => {
   }
   
   try {
+    // Hide the browser view before closing
+    if (browserView) {
+      browserView.setBounds({ x: 0, y: 0, width: 0, height: 0 })
+    }
     mainWindow.close()
     return { success: true }
   } catch (error) {
@@ -204,7 +187,13 @@ ipcMain.handle('navigateToUrl', async (event, url) => {
 ipcMain.handle('resizeBrowserView', (event, bounds) => {
   if (!browserView) return
   try {
-    browserView.setBounds(bounds)
+    // If the bounds are all 0, hide the view completely
+    if (bounds.width === 0 && bounds.height === 0) {
+      mainWindow.removeBrowserView(browserView)
+    } else {
+      mainWindow.addBrowserView(browserView)
+      browserView.setBounds(bounds)
+    }
   } catch (error) {
     console.error('Resize error:', error)
   }

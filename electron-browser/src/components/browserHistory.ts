@@ -8,6 +8,19 @@ export interface HistoryEntry {
     private history: HistoryEntry[] = []
     private currentIndex = -1
   
+    getEntries(): HistoryEntry[] {
+      return [...this.history]
+    }
+  
+    getCurrentIndex(): number {
+      return this.currentIndex
+    }
+  
+    restore(entries: HistoryEntry[], index: number) {
+      this.history = [...entries]
+      this.currentIndex = index
+    }
+  
     push(url: string, title: string) {
       // Remove all entries after current index when new navigation occurs
       this.history = this.history.slice(0, this.currentIndex + 1)
@@ -50,6 +63,9 @@ export interface HistoryEntry {
       }
       return null
     }
+  
+    clear() {
+      this.history = []
+      this.currentIndex = -1
+    }
   }
-  
-  
