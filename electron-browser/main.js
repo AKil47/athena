@@ -1,6 +1,7 @@
-const { app, BrowserWindow, ipcMain } = require('electron')
-const path = require('path')
-const isDev = require('electron-is-dev')
+import { app, BrowserWindow, ipcMain } from 'electron'
+import * as path from 'path'
+import * as isDev from 'electron-is-dev'
+
 
 let mainWindow = null
 
@@ -23,7 +24,7 @@ function createWindow() {
   )
 
   if (isDev) {
-    mainWindow.webContents.openDevTools()
+     mainWindow.webContents.openDevTools()
   }
 
   mainWindow.on('closed', () => {
