@@ -181,18 +181,6 @@ ipcMain.handle('navigateToUrl', async (event, url) => {
       'document.documentElement.outerHTML'
     )
 
-    // Calculate relevancy if we have a user goal
-    if (userGoal) {
-      const relevancyScore = await relevancyEngine.get_relevancy_score(
-        userGoal,
-        pageUrl,
-        title,
-        htmlSource,
-        relevancyEngine.previousRelevancyScores
-      )
-      console.log(`Relevancy score for ${title}: ${relevancyScore}`)
-    }
-
     return { 
       success: true,
       title: title,

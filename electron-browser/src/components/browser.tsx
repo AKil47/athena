@@ -341,7 +341,7 @@ export default function BrowserWindow() {
         if (result.success) {
           const { url, title, content } = result.data
           
-          const score = await relevancyEngine.get_relevancy_score(
+          const { score, justification } = await relevancyEngine.get_relevancy_score(
             userGoal,
             url,
             title,
