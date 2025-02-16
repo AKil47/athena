@@ -396,6 +396,11 @@ export default function BrowserWindow() {
     }
   }, [tabs])
 
+  const truncateTitle = (title: string, maxLength: number) => {
+    if (title.length <= maxLength) return title;
+    return title.slice(0, maxLength) + "...";
+  }
+
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">
       {/* Left Sidebar */}
@@ -513,7 +518,7 @@ export default function BrowserWindow() {
                     )}
                     <div className="truncate">
                       <div className="font-medium truncate">
-                        {tab.title}
+                        {truncateTitle(tab.title, 20)}
                         {tab.relevancyScore !== undefined && (
                           <TooltipProvider>
                             <TooltipRoot>
