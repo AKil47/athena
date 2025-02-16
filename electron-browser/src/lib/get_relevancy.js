@@ -52,7 +52,10 @@ class RelevancyEngine {
                - If the page contains **off-topic entertainment or discussion** (e.g., a Reddit forum about cats when researching Machiavelli), assign a low score.  
 
             4. **Session Context**  
-               - Consider whether the page is **part of a user's research workflow** (e.g., searching for articles before opening them).  
+               - Consider whether the page is **part of a user's research workflow** (e.g., searching for articles before opening them).
+
+            5. **Landing Page**
+               - The landing page for the browser itself is https://perplexity.ai. Treat it like you would Google, and give it 8/10 when opened first.
             
         </ScoringCriteria>
 
