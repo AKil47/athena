@@ -57,6 +57,7 @@ export default function BrowserWindow() {
   const [activeTab, setActiveTab] = useState<Tab | null>(tabs[0])
   const [searchInput, setSearchInput] = useState("")
   const [history] = useState(() => new BrowserHistory())
+  const [relevancyDebounceMap] = useState(new Map())
 
   const createNewTab = async () => {
     const newTab: Tab = {
@@ -237,8 +238,6 @@ export default function BrowserWindow() {
           )
         );
         setSearchInput(fullUrl);
-        await updateRelevancyScore(activeTab.id)
-
       } else {
         throw new Error(result.error);
       }
@@ -272,32 +271,43 @@ export default function BrowserWindow() {
 
   const relevancyEngine = new RelevancyEngine()
   const updateRelevancyScore = async (tabId: string) => {
-    try {
-      const result = await window.electron.getPageContent(tabId)
-      if (result.success) {
-        const { url, title, content } = result.data
-
-        // Use userGoal from the component scope instead of calling useUser() here
-        const score = await relevancyEngine.get_relevancy_score(
-          userGoal,  // Use the userGoal from above
-          url,
-          title,
-          content,
-          relevancyEngine.previousRelevancyScores
-        )
-
-        setTabs(currentTabs =>
-          currentTabs.map(tab =>
-            tab.id === tabId
-              ? { ...tab, relevancyScore: score }
-              : tab
-          )
-        )
-        console.log('Relevancy score updated:', score)
-      }
-    } catch (error) {
-      console.error('Error updating relevancy score:', error)
+    // Clear any existing timeout for this tab
+    if (relevancyDebounceMap.has(tabId)) {
+      clearTimeout(relevancyDebounceMap.get(tabId))
     }
+
+    // Set new timeout
+    const timeoutId = setTimeout(async () => {
+      try {
+        const result = await window.electron.getPageContent(tabId)
+        if (result.success) {
+          const { url, title, content } = result.data
+          
+          const score = await relevancyEngine.get_relevancy_score(
+            userGoal,
+            url,
+            title,
+            content,
+            relevancyEngine.previousRelevancyScores
+          )
+
+          setTabs(currentTabs =>
+            currentTabs.map(tab =>
+              tab.id === tabId
+                ? { ...tab, relevancyScore: score }
+                : tab
+            )
+          )
+          console.log('Relevancy score updated:', score)
+        }
+      } catch (error) {
+        console.error('Error updating relevancy score:', error)
+      } finally {
+        relevancyDebounceMap.delete(tabId)
+      }
+    }, 500) // 500ms debounce
+
+    relevancyDebounceMap.set(tabId, timeoutId)
   }
 
   useEffect(() => {
