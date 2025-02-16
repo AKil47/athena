@@ -40,9 +40,8 @@ interface Tab {
 
 
 export default function BrowserWindow() {
-
-  // can get the user name and prompt from right here !!!!
-  const { isAuthenticated } = useUser()
+  // Move the useUser hook call to the component level
+  const { isAuthenticated, userGoal } = useUser()
 
   const [isSplitView, setIsSplitView] = useState(false)
   const [tabs, setTabs] = useState<Tab[]>([
@@ -277,19 +276,15 @@ export default function BrowserWindow() {
       if (result.success) {
         const { url, title, content } = result.data
 
-        // Get user goal from context
-        const { userGoal } = useUser()
-
-        // Get the relevancy score
+        // Use userGoal from the component scope instead of calling useUser() here
         const score = await relevancyEngine.get_relevancy_score(
-          userGoal,
+          userGoal,  // Use the userGoal from above
           url,
           title,
           content,
           relevancyEngine.previousRelevancyScores
         )
 
-        // Update the tabs state with the new score
         setTabs(currentTabs =>
           currentTabs.map(tab =>
             tab.id === tabId
