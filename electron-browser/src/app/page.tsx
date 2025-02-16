@@ -1,11 +1,7 @@
 'use client'
 
-import Browser from "@/components/browser"
+import WelcomeScreen from "@/components/welcomeScreen"
 
 export default function Home() {
-  return (
-    <main className="min-h-screen">
-      <Browser />
-    </main>
-  )
+  return <WelcomeScreen />
 }
