@@ -11,6 +11,7 @@ import { useUser } from "@/lib/userContext"
 import RelevancyEngine from "@/lib/get_relevancy"
 import BrowserCloseHandler from "./browser-close-handler"
 import { useRouter } from "next/navigation"
+import { TooltipProvider, TooltipRoot, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 
 // Extend Window interface for Electron
 declare global {
@@ -37,6 +38,7 @@ interface Tab {
   content: string
   favicon?: string
   relevancyScore?: number
+  justification?: string
 }
 
 export default function BrowserWindow() {
@@ -341,7 +343,7 @@ export default function BrowserWindow() {
         if (result.success) {
           const { url, title, content } = result.data
           
-          const score = await relevancyEngine.get_relevancy_score(
+          const { score, justification } = await relevancyEngine.get_relevancy_score(
             userGoal,
             url,
             title,
@@ -352,7 +354,7 @@ export default function BrowserWindow() {
           setTabs(currentTabs =>
             currentTabs.map(tab =>
               tab.id === tabId
-                ? { ...tab, relevancyScore: score }
+                ? { ...tab, relevancyScore: score, justification: justification }
                 : tab
             )
           )
@@ -513,13 +515,28 @@ export default function BrowserWindow() {
                       <div className="font-medium truncate">
                         {tab.title}
                         {tab.relevancyScore !== undefined && (
-                          <span
-                            className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${tab.relevancyScore >= 7 ? "bg-green-500/20 text-green-300" :
-                              tab.relevancyScore >= 4 ? "bg-yellow-500/20 text-yellow-300" :
-                                "bg-red-500/20 text-red-300"
-                              }`}>
-                            {tab.relevancyScore}/10
-                          </span>
+                          <TooltipProvider>
+                            <TooltipRoot>
+                              <TooltipTrigger asChild>
+                                <span
+                                  className={`ml-2 px-1.5 py-0.5 text-xs rounded-full cursor-help ${
+                                    tab.relevancyScore >= 7
+                                      ? "bg-green-500/20 text-green-300"
+                                      : tab.relevancyScore >= 4
+                                      ? "bg-yellow-500/20 text-yellow-300"
+                                      : "bg-red-500/20 text-red-300"
+                                  }`}
+                                >
+                                  {tab.relevancyScore}/10
+                                </span>
+                              </TooltipTrigger>
+                              {tab.justification && (
+                                <TooltipContent side="right" className="max-w-[300px]">
+                                  {tab.justification}
+                                </TooltipContent>
+                              )}
+                            </TooltipRoot>
+                          </TooltipProvider>
                         )}
                       </div>
                       <div className="text-xs text-muted-foreground truncate">

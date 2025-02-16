@@ -27,6 +27,15 @@ const createBrowserView = () => {
   
   mainWindow.setBrowserView(view)
   view.setBounds({ x: 0, y: 0, width: 0, height: 0 })
+  // Set a lower z-index for the BrowserView
+  view.setBackgroundColor('#ffffff')
+  view.webContents.setZoomFactor(1.0)
+  view.webContents.setVisualZoomLevelLimits(1, 1)
+  view.setAutoResize({ width: true, height: true })
+  // This is the key change - set the browser view to a specific z-index
+  mainWindow.webContents.executeJavaScript(`
+    document.querySelector('webview').style.zIndex = '1';
+  `)
   return view
 }
 
@@ -180,18 +189,6 @@ ipcMain.handle('navigateToUrl', async (event, url) => {
     const htmlSource = await browserView.webContents.executeJavaScript(
       'document.documentElement.outerHTML'
     )
-
-    // Calculate relevancy if we have a user goal
-    if (userGoal) {
-      const relevancyScore = await relevancyEngine.get_relevancy_score(
-        userGoal,
-        pageUrl,
-        title,
-        htmlSource,
-        relevancyEngine.previousRelevancyScores
-      )
-      console.log(`Relevancy score for ${title}: ${relevancyScore}`)
-    }
 
     return { 
       success: true,

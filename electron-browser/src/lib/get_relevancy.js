@@ -142,10 +142,14 @@ class RelevancyEngine {
         const scoreMatch = responseContent.match(/<RelevancyScore>(\d+)<\/RelevancyScore>/);
         const score = scoreMatch ? parseInt(scoreMatch[1], 10) : 0;
 
+
+        const justificationMatch = responseContent.match(/<Justification>(.+)<\/Justification>/);
+        const justification = scoreMatch ? justificationMatch[1] : "Justification not available";
+
         // Append score to previous scores
         this.previousRelevancyScores.push(score);
 
-        return score;
+        return {"score": score, "justification": justification};
     }
 }
 
