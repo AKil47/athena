@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, session } from 'electron'
+import { app, BrowserWindow, BrowserView, ipcMain } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import isDev from 'electron-is-dev'
@@ -7,8 +7,25 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 let mainWindow = null
+let browserView = null
+
+const createBrowserView = () => {
+  browserView = new BrowserView({
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      webSecurity: true,
+    }
+  })
+  
+  mainWindow.setBrowserView(browserView)
+  browserView.setBounds({ x: 0, y: 0, width: 0, height: 0 })
+}
 
 function createWindow() {
+  const preloadScript = path.join(__dirname, 'preload.cjs')
+  console.log('Loading preload script from:', preloadScript)
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -17,50 +34,40 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: true,
-      webviewTag: false,
-      preload: path.join(__dirname, 'preload.js')
+      sandbox: false,
+      preload: preloadScript
     },
-    titleBarStyle: 'hidden',
-    trafficLightPosition: { x: 20, y: 20 },
     backgroundColor: '#1a1a1a'
   })
 
-  mainWindow.loadURL(
-    isDev 
-      ? 'http://localhost:3000' 
-      : `file://${path.join(__dirname, '../build/index.html')}`
-  )
+  createBrowserView()
+
+  const startUrl = isDev 
+    ? 'http://localhost:3000' 
+    : `file://${path.join(__dirname, '../build/index.html')}`
+
+  console.log('Loading application from:', startUrl)
+  mainWindow.loadURL(startUrl)
 
   if (isDev) {
     mainWindow.webContents.openDevTools()
   }
 
-  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    callback({
-      responseHeaders: {
-        ...details.responseHeaders,
-        'Content-Security-Policy': [
-          "default-src 'self' http://localhost:3000",
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:3000",
-          "style-src 'self' 'unsafe-inline' http://localhost:3000",
-          "img-src 'self' data: https: http:",
-          "connect-src 'self' https: http:",
-        ].join('; ')
-      }
-    })
+  mainWindow.webContents.on('did-finish-load', () => {
+    console.log('Main window loaded')
   })
 
   mainWindow.on('closed', () => {
     mainWindow = null
+    browserView = null
   })
 }
 
 app.whenReady().then(() => {
   createWindow()
-
+  
   app.on('activate', () => {
-    if (mainWindow === null) {
+    if (!mainWindow) {
       createWindow()
     }
   })
@@ -72,63 +79,34 @@ app.on('window-all-closed', () => {
   }
 })
 
-ipcMain.handle('navigate', async (event, url) => {
-  if (!mainWindow) return
+// IPC handlers
+ipcMain.handle('navigateToUrl', async (event, url) => {
+  console.log('Navigate request received:', url)
+  if (!browserView) {
+    console.error('BrowserView not initialized')
+    return { success: false, error: 'BrowserView not initialized' }
+  }
+
   try {
-    await mainWindow.loadURL(
-      isDev 
-        ? `http://localhost:3000${url}` 
-        : `file://${path.join(__dirname, `../build${url}/index.html`)}`
-    )
-    return { success: true }
+    await browserView.webContents.loadURL(url)
+    return { 
+      success: true,
+      title: browserView.webContents.getTitle(),
+      url: browserView.webContents.getURL()
+    }
   } catch (error) {
     console.error('Navigation error:', error)
     return { success: false, error: error.message }
   }
 })
 
-ipcMain.handle('open-external-url', async (event, url) => {
-  if (!mainWindow) return
+ipcMain.handle('resizeBrowserView', (event, bounds) => {
+  if (!browserView) return
+
   try {
-    const validUrl = new URL(url)
-    if (validUrl.protocol !== 'http:' && validUrl.protocol !== 'https:') {
-      throw new Error('Invalid protocol')
-    }
-
-    const win = new BrowserWindow({
-      width: 1200,
-      height: 800,
-      parent: mainWindow,
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-        sandbox: true
-      }
-    })
-
-    await win.loadURL(url)
-    return { success: true }
+    // No additional calculations needed since we're passing exact coordinates
+    browserView.setBounds(bounds)
   } catch (error) {
-    console.error('External URL error:', error)
-    return { success: false, error: error.message }
-  }
-})
-
-if (isDev) {
-  try {
-    const electronReloader = await import('electron-reloader')
-    electronReloader.default(import.meta.url, {
-      debug: true,
-      watchRenderer: true
-    })
-  } catch (error) {
-    console.error('Error setting up hot reload:', error)
-  }
-}
-
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught exception:', error)
-  if (mainWindow) {
-    mainWindow.webContents.send('error', error.message)
+    console.error('Resize error:', error)
   }
 })
