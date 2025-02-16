@@ -27,6 +27,15 @@ const createBrowserView = () => {
   
   mainWindow.setBrowserView(view)
   view.setBounds({ x: 0, y: 0, width: 0, height: 0 })
+  // Set a lower z-index for the BrowserView
+  view.setBackgroundColor('#ffffff')
+  view.webContents.setZoomFactor(1.0)
+  view.webContents.setVisualZoomLevelLimits(1, 1)
+  view.setAutoResize({ width: true, height: true })
+  // This is the key change - set the browser view to a specific z-index
+  mainWindow.webContents.executeJavaScript(`
+    document.querySelector('webview').style.zIndex = '1';
+  `)
   return view
 }
 
