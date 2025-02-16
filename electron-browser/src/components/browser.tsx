@@ -398,7 +398,7 @@ export default function BrowserWindow() {
 
   const truncateTitle = (title: string, maxLength: number) => {
     if (title.length <= maxLength) return title;
-    return title.slice(0, maxLength) + "...";
+    return title.slice(0, maxLength) + '...';
   }
 
   return (
@@ -502,7 +502,7 @@ export default function BrowserWindow() {
                     ${tab.isActive ? "bg-white/10" : "hover:bg-white/5"}`}
                   onClick={() => switchTab(tab)}
                 >
-                  <div className="flex items-center flex-1 min-w-0">
+                  <div className="flex items-center flex-1 min-w-0 pl-2">
                     {tab.favicon ? (
                       <img
                         src={tab.favicon}
@@ -517,8 +517,8 @@ export default function BrowserWindow() {
                       <Globe className="h-4 w-4 shrink-0 mr-3 text-muted-foreground" />
                     )}
                     <div className="truncate">
-                      <div className="font-medium truncate">
-                        {truncateTitle(tab.title, 20)}
+                      <div className="font-medium">
+                        {truncateTitle(tab.title, 17)} {/* Adjust the maxLength as needed */}
                         {tab.relevancyScore !== undefined && (
                           <TooltipProvider>
                             <TooltipRoot>
