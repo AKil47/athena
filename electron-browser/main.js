@@ -126,7 +126,7 @@ ipcMain.handle('closeWindow', () => {
     console.error('Error closing window:', error)
     return { success: false, error: error.message }
   }
-});
+})
 
 // Tab management handlers
 ipcMain.handle('createTab', (event, tabId) => {

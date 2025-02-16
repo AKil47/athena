@@ -18,6 +18,23 @@ interface LeaderboardEntry {
     isFriend?: boolean
 }
 
+declare global {
+    interface Window {
+      electron: {
+        navigateToUrl: (url: string) => Promise<{ success: boolean; title?: string; error?: string }>
+        resizeBrowserView: (bounds: { x: number; y: number; width: number; height: number }) => void
+        initializeBrowser: () => Promise<{ success: boolean }>
+        createTab: (id: string) => Promise<{ success: boolean; error?: string }>
+        switchTab: (id: string) => Promise<{ success: boolean; error?: string }>
+        closeTab: (id: string) => Promise<{ success: boolean; error?: string }>
+        onTitleUpdate: (callback: ({ viewId, title }: { viewId: string; title: string }) => void) => void
+        closeWindow: () => Promise<{ success: boolean; error?: string }>
+        getPageContent: () => Promise<{ success: boolean; data?: { url: string; title: string; content: string }; error?: string }>
+      }
+    }
+  }
+  
+
 export default function LeaderboardPage() {
   const router = useRouter()
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([
@@ -49,32 +66,74 @@ export default function LeaderboardPage() {
     },
     // Add more sample data as needed
   ])
-  const handleHomeClick = () => {
-    router.push("/")
+  const handleHomeClick = async () => {
+    console.log("Home click triggered")
+    try {
+      // Get the stored tab data
+      const savedTab = localStorage.getItem('lastActiveTab')
+      if (savedTab && window.electron) {
+        console.log("Found saved tab:", savedTab)
+        const parsedTab = JSON.parse(savedTab)
+        
+        // First restore the browser view
+        const bounds = {
+          x: 80,
+          y: 64,
+          width: window.innerWidth - 80 - 320,
+          height: window.innerHeight - 64,
+        }
+        await window.electron.resizeBrowserView(bounds)
+        console.log("Browser view resized")
+        
+        // Then switch to the saved tab
+        const result = await window.electron.switchTab(parsedTab.id)
+        console.log("Switch tab result:", result)
+        
+        if (result.success) {
+          // Show browser window and hide leaderboard
+          const browserWindow = document.querySelector('.browser-window')
+          const leaderboard = document.querySelector('.leaderboard-page')
+          
+          if (browserWindow instanceof HTMLElement) {
+            browserWindow.style.display = 'flex'
+            console.log("Browser window shown")
+          }
+          
+          if (leaderboard instanceof HTMLElement) {
+            leaderboard.style.display = 'none'
+            console.log("Leaderboard hidden")
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error in handleHomeClick:', error)
+    }
   }
 
-  useEffect(() => {
-    // Hide all browser-window elements
-    const browserWindows = document.querySelectorAll('.browser-window')
-    browserWindows.forEach(window => {
-      if (window instanceof HTMLElement) {
-        window.style.display = 'none'
-      }
-    })
 
-    // Cleanup function to show browser windows when unmounting
-    return () => {
-      browserWindows.forEach(window => {
-        if (window instanceof HTMLElement) {
-          window.style.display = 'flex'
-        }
-      })
+  useEffect(() => {
+    try {
+      const browserWindow = document.querySelector('.browser-window')
+      if (browserWindow instanceof HTMLElement) {
+        browserWindow.style.display = 'none'
+      }
+
+      if (window.electron) {
+        window.electron.resizeBrowserView({
+          x: 0,
+          y: 0,
+          width: 0,
+          height: 0
+        })
+      }
+    } catch (error) {
+      console.error('Error in leaderboard mount effect:', error)
     }
   }, [])
 
   return (
     <div className="fixed inset-0 z-50 flex h-screen w-full overflow-hidden bg-background">
-      {/* Left Sidebar */}
+      {/* Rest of your JSX remains the same */}
       <div className="w-20 glass flex flex-col items-center py-6 gap-6 border-r border-white/10">
         <Button
           variant="ghost"
