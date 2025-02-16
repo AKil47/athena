@@ -3,7 +3,7 @@ import * as path from 'path'
 import * as isDev from 'electron-is-dev'
 
 
-let mainWindow = null
+let mainWindow
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -11,16 +11,13 @@ function createWindow() {
     height: 800,
     webPreferences: {
       nodeIntegration: true,
-      contextIsolation: false,
-      webviewTag: true,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
     }
   })
 
-  // Load the Next.js app
   mainWindow.loadURL(
-    isDev
-      ? 'http://localhost:3000'
-      : `file://${path.join(__dirname, '../build/index.html')}`
+    isDev ? 'http://localhost:3000' : `file://${path.join(__dirname, '../build/index.html')}`
   )
 
   if (isDev) {
@@ -34,31 +31,9 @@ function createWindow() {
 
 app.whenReady().then(createWindow)
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
-})
-
-app.on('activate', () => {
-  if (mainWindow === null) {
-    createWindow()
-  }
-})
-
-// Handle navigation events
-ipcMain.on('navigate', (_event, url) => {
-  if (mainWindow) {
-    mainWindow.webContents.loadURL(url)
-  }
-})
-
-// Handle navigation state
-ipcMain.on('get-nav-state', (event) => {
-  if (mainWindow) {
-    event.reply('navigation-state', {
-      canGoBack: mainWindow.webContents.canGoBack(),
-      canGoForward: mainWindow.webContents.canGoForward()
-    })
-  }
+// Handle navigation IPC
+ipcMain.on('navigate', (event, path) => {
+  mainWindow.loadURL(
+    isDev ? `http://localhost:3000${path}` : `file://${path.join(__dirname, `../build${path}/index.html`)}`
+  )
 })
