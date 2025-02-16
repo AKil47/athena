@@ -16,14 +16,15 @@ import { useRouter } from "next/navigation"
 declare global {
   interface Window {
     electron: {
-      navigateToUrl: (url: string) => Promise<{ success: boolean; title?: string; error?: string }>
-      resizeBrowserView: (bounds: { x: number; y: number; width: number; height: number }) => void
-      initializeBrowser: () => Promise<{ success: boolean }>
-      createTab: (id: string) => Promise<{ success: boolean; error?: string }>
-      switchTab: (id: string) => Promise<{ success: boolean; error?: string }>
-      closeTab: (id: string) => Promise<{ success: boolean; error?: string }>
-      onTitleUpdate: (callback: ({ viewId, title }: { viewId: string; title: string }) => void) => void
-      getPageContent: () => Promise<{ success: boolean; data?: { url: string; title: string; content: string }; error?: string }>
+      navigateToUrl: (url: string) => Promise<{ success: boolean; title?: string; error?: string }>,
+      resizeBrowserView: (bounds: { x: number; y: number; width: number; height: number }) => void,
+      initializeBrowser: () => Promise<{ success: boolean }>,
+      createTab: (id: string) => Promise<{ success: boolean; error?: string }>,
+      switchTab: (id: string) => Promise<{ success: boolean; error?: string }>,
+      closeTab: (id: string) => Promise<{ success: boolean; error?: string }>,
+      onTitleUpdate: (callback: ({ viewId, title }: { viewId: string; title: string }) => void) => void,
+      getPageContent: (id: string) => Promise<{ success: boolean; data?: { url: string; title: string; content: string }; error?: string }>,
+      onNavigate: (callback: ({ viewId, url }: { viewId: string; url: string }) => void) => void
     }
   }
 }
@@ -55,7 +56,7 @@ export default function BrowserWindow() {
   const [activeTab, setActiveTab] = useState<Tab | null>(tabs[0])
   const [searchInput, setSearchInput] = useState("")
   const [history] = useState(() => new BrowserHistory())
-  const relevancyEngine = new RelevancyEngine()
+  const [relevancyDebounceMap] = useState(new Map())
 
   // Store last active tab when switching
   useEffect(() => {
@@ -349,7 +350,80 @@ export default function BrowserWindow() {
     }
   }
 
-  // Rest of your JSX remains the same...
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (searchInput) {
+      navigateToUrl(searchInput)
+    }
+  }
+
+  const relevancyEngine = new RelevancyEngine()
+  const updateRelevancyScore = async (tabId: string) => {
+    // Clear any existing timeout for this tab
+    if (relevancyDebounceMap.has(tabId)) {
+      clearTimeout(relevancyDebounceMap.get(tabId))
+    }
+
+    // Set new timeout
+    const timeoutId = setTimeout(async () => {
+      try {
+        const result = await window.electron.getPageContent(tabId)
+        if (result.success) {
+          const { url, title, content } = result.data
+          
+          const score = await relevancyEngine.get_relevancy_score(
+            userGoal,
+            url,
+            title,
+            content,
+            relevancyEngine.previousRelevancyScores
+          )
+
+          setTabs(currentTabs =>
+            currentTabs.map(tab =>
+              tab.id === tabId
+                ? { ...tab, relevancyScore: score }
+                : tab
+            )
+          )
+          console.log('Relevancy score updated:', score)
+        }
+      } catch (error) {
+        console.error('Error updating relevancy score:', error)
+      } finally {
+        relevancyDebounceMap.delete(tabId)
+      }
+    }, 500) // 500ms debounce
+
+    relevancyDebounceMap.set(tabId, timeoutId)
+  }
+
+  useEffect(() => {
+    if (window.electron) {
+      window.electron.onNavigate(({ viewId, url }) => {
+        // Find the tab that navigated
+        const navigatedTab = tabs.find(tab => tab.id === viewId)
+        if (navigatedTab) {
+          // Update the tab's URL, title, and favicon
+          setTabs(currentTabs =>
+            currentTabs.map(tab =>
+              tab.id === viewId
+                ? {
+                    ...tab,
+                    url,
+                    title: new URL(url).hostname, // Set initial title to hostname
+                    favicon: `https://www.google.com/s2/favicons?domain=${new URL(url).hostname}&sz=32`
+                  }
+                : tab
+            )
+          )
+          // Update relevancy score for the navigated tab
+          updateRelevancyScore(viewId)
+        }
+      })
+    }
+  }, [tabs])
+
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">
       {/* Left Sidebar */}

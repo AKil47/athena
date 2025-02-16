@@ -72,6 +72,21 @@ function createWindow() {
     browserView = null
     browserViews.clear()
   })
+
+  // Add this after creating the browserView
+  browserView.webContents.on('did-navigate', (event, url) => {
+    // Get the active view's ID
+    const activeViewId = Array.from(browserViews.entries())
+      .find(([_, view]) => view === browserView)?.[0]
+    
+    if (activeViewId) {
+      // Send the navigation event to the renderer
+      mainWindow.webContents.send('page-navigated', {
+        viewId: activeViewId,
+        url: url
+      })
+    }
+  })
 }
 
 app.whenReady().then(() => {
