@@ -1,19 +1,24 @@
 import OpenAI from "openai";
 import * as dotenv from 'dotenv';
 
+// In Next.js, we can use process.cwd() to get the project root
+dotenv.config({ path: process.cwd() + '/.env' });
 
-dotenv.config();
+// Verify the key is loaded
+if (!process.env.NEXT_PUBLIC_OPENAI_KEY) {
+    throw new Error('NEXT_PUBLIC_OPENAI_KEY environment variable is not set');
+}
 
-console.log(process.env.OPENAI_KEY);
-
+console.log(process.env.NEXT_PUBLIC_OPENAI_KEY);
 
 export async function query_single(system, prompt) {
     const openai = new OpenAI({
-        apiKey: process.env.OPENAI_KEY
+        apiKey: process.env.NEXT_PUBLIC_OPENAI_KEY,
+        dangerouslyAllowBrowser: true
     });
     
     const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: "gpt-4",
         messages: [
             { role: "system", content: system},
             {

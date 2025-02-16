@@ -3,6 +3,7 @@ import { app, BrowserWindow, BrowserView, ipcMain } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import isDev from 'electron-is-dev'
+import RelevancyEngine from './src/lib/get_relevancy.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -10,6 +11,10 @@ const __dirname = path.dirname(__filename)
 let mainWindow = null
 let browserView = null
 const browserViews = new Map()
+
+// Add relevancy engine instance
+const relevancyEngine = new RelevancyEngine()
+let userGoal = null  // We'll need to set this via IPC
 
 const createBrowserView = () => {
   const view = new BrowserView({
@@ -139,10 +144,30 @@ ipcMain.handle('navigateToUrl', async (event, url) => {
   
   try {
     await browserView.webContents.loadURL(url)
+    
+    // Get page details for relevancy check
+    const title = browserView.webContents.getTitle()
+    const pageUrl = browserView.webContents.getURL()
+    const htmlSource = await browserView.webContents.executeJavaScript(
+      'document.documentElement.outerHTML'
+    )
+
+    // Calculate relevancy if we have a user goal
+    if (userGoal) {
+      const relevancyScore = await relevancyEngine.get_relevancy_score(
+        userGoal,
+        pageUrl,
+        title,
+        htmlSource,
+        relevancyEngine.previousRelevancyScores
+      )
+      console.log(`Relevancy score for ${title}: ${relevancyScore}`)
+    }
+
     return { 
       success: true,
-      title: browserView.webContents.getTitle(),
-      url: browserView.webContents.getURL()
+      title: title,
+      url: pageUrl
     }
   } catch (error) {
     console.error('Navigation error:', error)
@@ -156,5 +181,61 @@ ipcMain.handle('resizeBrowserView', (event, bounds) => {
     browserView.setBounds(bounds)
   } catch (error) {
     console.error('Resize error:', error)
+  }
+})
+
+// Add IPC handler for setting user goal
+ipcMain.handle('setUserGoal', (event, goal) => {
+  userGoal = goal
+  return { success: true }
+})
+
+// Add this new IPC handler
+ipcMain.handle('getPageContent', async () => {
+  if (!browserView) {
+    return { success: false, error: 'BrowserView not initialized' }
+  }
+  
+  try {
+    const title = browserView.webContents.getTitle()
+    const pageUrl = browserView.webContents.getURL()
+    // Get only visible text content
+    const visibleText = await browserView.webContents.executeJavaScript(`
+      (function() {
+        // Remove script and style elements
+        const scripts = document.querySelectorAll('script, style');
+        scripts.forEach(el => el.remove());
+        
+        // Get visible text
+        return Array.from(document.body.getElementsByTagName('*'))
+          .map(element => {
+            const style = window.getComputedStyle(element);
+            const isVisible = style.display !== 'none' && 
+                            style.visibility !== 'hidden' && 
+                            style.opacity !== '0';
+            
+            if (isVisible) {
+              return element.innerText;
+            }
+            return '';
+          })
+          .join(' ')
+          .replace(/\\s+/g, ' ')
+          .trim()
+          .substring(0, 4000); // Limit to first 4000 characters
+      })()
+    `)
+    
+    return {
+      success: true,
+      data: {
+        title,
+        url: pageUrl,
+        content: visibleText
+      }
+    }
+  } catch (error) {
+    console.error('Error getting page content:', error)
+    return { success: false, error: error.message }
   }
 })
