@@ -503,7 +503,7 @@ export default function BrowserWindow() {
                     ${tab.isActive ? "bg-white/10" : "hover:bg-white/5"}`}
                   onClick={() => switchTab(tab)}
                 >
-                  <div className="flex items-center flex-1 min-w-0 pl-1"> {/* Adjust the padding-left as needed */}
+                  <div className="flex items-center flex-1 min-w-0 pl+1"> {/* Adjust the padding-left as needed */}
                     {tab.favicon ? (
                       <img
                         src={tab.favicon}
