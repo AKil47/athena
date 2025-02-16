@@ -132,7 +132,7 @@ export default function LeaderboardPage() {
                     {index + 1}
                   </div>
                   <Avatar className="h-10 w-10 ring-2 ring-primary/20">
-                    <AvatarImage src={entry.avatar} />
+                    <AvatarImage src={entry.avatar} className="bg-white" />
                     <AvatarFallback className="bg-primary/10 text-primary">
                       {entry.name.charAt(0)}
                     </AvatarFallback>
