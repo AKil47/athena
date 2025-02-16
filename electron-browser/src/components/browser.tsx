@@ -9,7 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { BrowserHistory } from "@/components/browserHistory"
 import { useUser } from "@/lib/userContext"
-import { useRouter } from "next/navigation"
+import RelevancyEngine  from "@/lib/get_relevancy"
 
 // Extend the Window interface to include the electron property
 declare global {
@@ -21,7 +21,8 @@ declare global {
       createTab: (id: string) => Promise<{ success: boolean; error?: string }>,
       switchTab: (id: string) => Promise<{ success: boolean; error?: string }>,
       closeTab: (id: string) => Promise<{ success: boolean; error?: string }>,
-      onTitleUpdate: (callback: ({ viewId, title }: { viewId: string; title: string }) => void) => void
+      onTitleUpdate: (callback: ({ viewId, title }: { viewId: string; title: string }) => void) => void,
+      getPageContent: (id: string) => Promise<{ success: boolean; data?: { url: string; title: string; content: string }; error?: string }>
     }
   }
 }
@@ -34,6 +35,7 @@ interface Tab {
   isActive: boolean
   content: string
   favicon?: string
+  relevancyScore?: number
 }
 
 
@@ -64,7 +66,7 @@ export default function BrowserWindow() {
       isActive: true,
       content: "",
     }
-  
+
     try {
       const result = await window.electron.createTab(newTab.id)
       if (result.success) {
@@ -100,11 +102,11 @@ export default function BrowserWindow() {
       return () => clearInterval(interval)
     }
   }, [])
-  
+
   useEffect(() => {
     if (window.electron) {
       window.electron.onTitleUpdate(({ viewId, title }) => {
-        setTabs(currentTabs => 
+        setTabs(currentTabs =>
           currentTabs.map(tab => {
             if (tab.isActive) {
               return {
@@ -150,7 +152,7 @@ export default function BrowserWindow() {
     }
 
     window.addEventListener("resize", updateBrowserViewBounds)
-    updateBrowserViewBounds() 
+    updateBrowserViewBounds()
 
     return () => window.removeEventListener("resize", updateBrowserViewBounds)
   }, [isAuthenticated, activeTab])
@@ -164,7 +166,7 @@ export default function BrowserWindow() {
         } else {
           const tabIndex = tabs.findIndex((tab) => tab.id === tabId)
           const newTabs = tabs.filter((tab) => tab.id !== tabId)
-  
+
           if (activeTab?.id === tabId) {
             const newActiveTab = newTabs[Math.min(tabIndex, newTabs.length - 1)]
             await switchTab(newActiveTab)
@@ -202,39 +204,41 @@ export default function BrowserWindow() {
 
   const navigateToUrl = async (url) => {
     if (!activeTab) return;
-  
+
     let fullUrl = url;
     if (!url.startsWith("http://") && !url.startsWith("https://")) {
-      fullUrl = url.includes(".") 
-        ? `https://${url}` 
+      fullUrl = url.includes(".")
+        ? `https://${url}`
         : `https://www.google.com/search?q=${encodeURIComponent(url)}`;
     }
-  
+
     try {
       setTabs(
         tabs.map((tab) =>
-          tab.id === activeTab.id 
-            ? { ...tab, url: fullUrl, title: "Loading...", content: "Loading..." } 
+          tab.id === activeTab.id
+            ? { ...tab, url: fullUrl, title: "Loading...", content: "Loading..." }
             : tab
         )
       );
-  
+
       const result = await window.electron.navigateToUrl(fullUrl);
-  
+
       if (result.success) {
         setTabs(
           tabs.map((tab) =>
             tab.id === activeTab.id
               ? {
-                  ...tab,
-                  url: fullUrl,
-                  title: result.title || new URL(fullUrl).hostname,
-                  favicon: `https://www.google.com/s2/favicons?domain=${new URL(fullUrl).hostname}&sz=32`,
-                }
+                ...tab,
+                url: fullUrl,
+                title: result.title || new URL(fullUrl).hostname,
+                favicon: `https://www.google.com/s2/favicons?domain=${new URL(fullUrl).hostname}&sz=32`,
+              }
               : tab
           )
         );
         setSearchInput(fullUrl);
+        await updateRelevancyScore(activeTab.id)
+
       } else {
         throw new Error(result.error);
       }
@@ -242,8 +246,8 @@ export default function BrowserWindow() {
       console.error("Navigation error:", error);
       setTabs(
         tabs.map((tab) =>
-          tab.id === activeTab.id 
-            ? { ...tab, title: "Error", content: `Failed to load page: ${error.message}` } 
+          tab.id === activeTab.id
+            ? { ...tab, title: "Error", content: `Failed to load page: ${error.message}` }
             : tab
         )
       );
@@ -258,10 +262,45 @@ export default function BrowserWindow() {
       return url
     }
   }
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     if (searchInput) {
       navigateToUrl(searchInput)
+    }
+  }
+
+  const relevancyEngine = new RelevancyEngine()
+  const updateRelevancyScore = async (tabId: string) => {
+    try {
+      const result = await window.electron.getPageContent(tabId)
+      if (result.success) {
+        const { url, title, content } = result.data
+
+        // Get user goal from context
+        const { userGoal } = useUser()
+
+        // Get the relevancy score
+        const score = await relevancyEngine.get_relevancy_score(
+          userGoal,
+          url,
+          title,
+          content,
+          relevancyEngine.previousRelevancyScores
+        )
+
+        // Update the tabs state with the new score
+        setTabs(currentTabs =>
+          currentTabs.map(tab =>
+            tab.id === tabId
+              ? { ...tab, relevancyScore: score }
+              : tab
+          )
+        )
+        console.log('Relevancy score updated:', score)
+      }
+    } catch (error) {
+      console.error('Error updating relevancy score:', error)
     }
   }
 
@@ -364,13 +403,13 @@ export default function BrowserWindow() {
                 <div
                   key={tab.id}
                   className={`group flex items-center p-3 rounded-xl cursor-pointer transition-colors
-                    ${tab.isActive ? "bg-white/10" : "hover:bg-white/5"}`}
+          ${tab.isActive ? "bg-white/10" : "hover:bg-white/5"}`}
                   onClick={() => switchTab(tab)}
                 >
                   <div className="flex items-center flex-1 min-w-0">
                     {tab.favicon ? (
                       <img
-                        src={tab.favicon || "/placeholder.svg"}
+                        src={tab.favicon}
                         alt=""
                         className="h-4 w-4 shrink-0 mr-3"
                         onError={(e) => {
@@ -382,8 +421,20 @@ export default function BrowserWindow() {
                       <Globe className="h-4 w-4 shrink-0 mr-3 text-muted-foreground" />
                     )}
                     <div className="truncate">
-                      <div className="font-medium truncate">{tab.title}</div>
-                      <div className="text-xs text-muted-foreground truncate">{formatUrl(tab.url)}</div>
+                      <div className="font-medium truncate">
+                        {tab.title}
+                        {tab.relevancyScore !== undefined && (
+                          <span className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${tab.relevancyScore >= 7 ? "bg-green-500/20 text-green-300" :
+                              tab.relevancyScore >= 4 ? "bg-yellow-500/20 text-yellow-300" :
+                                "bg-red-500/20 text-red-300"
+                            }`}>
+                            {tab.relevancyScore}/10
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground truncate">
+                        {formatUrl(tab.url)}
+                      </div>
                     </div>
                   </div>
                   <Button
