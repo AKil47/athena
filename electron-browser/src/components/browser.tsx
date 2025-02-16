@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator"
 import { BrowserHistory } from "@/components/browserHistory"
 import { useUser } from "@/lib/userContext"
 import RelevancyEngine  from "@/lib/get_relevancy"
+import BrowserCloseHandler from './browser-close-handler';
 
 // Extend the Window interface to include the electron property
 declare global {
@@ -396,11 +397,12 @@ export default function BrowserWindow() {
             <div className="p-2 space-y-2">
               {tabs.map((tab) => (
                 <div
-                  key={tab.id}
-                  className={`group flex items-center p-3 rounded-xl cursor-pointer transition-colors
-          ${tab.isActive ? "bg-white/10" : "hover:bg-white/5"}`}
-                  onClick={() => switchTab(tab)}
-                >
+                key={tab.id}
+                data-relevancy-score={tab.relevancyScore} 
+                className={`group flex items-center p-3 rounded-xl cursor-pointer transition-colors
+                  ${tab.isActive ? "bg-white/10" : "hover:bg-white/5"}`}
+                onClick={() => switchTab(tab)}
+              >
                   <div className="flex items-center flex-1 min-w-0">
                     {tab.favicon ? (
                       <img
@@ -449,6 +451,7 @@ export default function BrowserWindow() {
           </ScrollArea>
         </div>
       </div>
+      <BrowserCloseHandler />
     </div>
   )
 }
