@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import * as dotenv from 'dotenv';
 
+// In Next.js, we can use process.cwd() to get the project root
 dotenv.config({ path: process.cwd() + '/.env' });
 
 // Verify the key is loaded
@@ -17,7 +18,7 @@ export async function query_single(system, prompt) {
     });
     
     const completion = await openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
+        model: "gpt-4o-mini",
         messages: [
             { role: "system", content: system},
             {
@@ -28,31 +29,5 @@ export async function query_single(system, prompt) {
         store: false,
     });
 
-    const maxRetries = 3;
-    let retries = 0;
-    while (retries < maxRetries) {
-        try {
-            const completion = await openai.chat.completions.create({
-                model: "gpt-3.5-turbo",
-                messages: [
-                    { role: "system", content: system },
-                    { role: "user", content: prompt },
-                ],
-                store: false,
-            });
-
-            return completion.choices[0].message;
-        } catch (error) {
-            if (error.response && error.response.status === 429) {
-                retries++;
-                console.log(`Rate limit exceeded. Retrying... Attempt ${retries}`);
-                // Wait for a few seconds before retrying
-                await new Promise(resolve => setTimeout(resolve, 5000)); // 5 seconds
-            } else {
-                throw error; // Re-throw non-rate limit errors
-            }
-        }
-    }
-
-    throw new Error('Exceeded maximum retries due to rate limiting.');
+    return completion.choices[0].message
 }

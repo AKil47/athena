@@ -7,26 +7,40 @@ interface ScoringVisualizationProps {
   onClose: () => void;
 }
 
+interface ElectronWindow {
+  electron?: {
+    closeWindow?: () => void;
+    [key: string]: any;
+  };
+}
+
+declare const window: ElectronWindow;
+
 export default function ScoringVisualization({ scores, onClose }: ScoringVisualizationProps) {
+  // Increased dimensions for larger graph
+  const width = 1200;
+  const height = 600;
+  const padding = 100;
+  const graphWidth = width - (padding * 2);
+  
   const getPathPoints = () => {
     return scores.map((score, i) => {
-      const x = 100 + (i * 600) / Math.max(1, scores.length - 1);
+      const x = padding + (i * graphWidth) / Math.max(1, scores.length - 1);
       const normalizedScore = score - 8; 
-      const y = 200 - (normalizedScore * 150); 
+      const y = (height / 2) - (normalizedScore * 200); // Increased scale factor
       return { x, y };
     });
   };
 
   const points = getPathPoints();
   
-  // Create a smoother path for animation
+  // Create a smoother path for display
   const createSmoothPath = () => {
     if (points.length < 2) return '';
     
     return points.reduce((path, point, i) => {
       if (i === 0) return `M ${point.x},${point.y}`;
       
-      // Calculate control points for smooth curve
       const prevPoint = points[i - 1];
       const cp1x = prevPoint.x + (point.x - prevPoint.x) / 3;
       const cp1y = prevPoint.y;
@@ -42,18 +56,36 @@ export default function ScoringVisualization({ scores, onClose }: ScoringVisuali
   // Generate curve for baseline (8/10)
   const baselinePoints = [];
   for (let i = 0; i <= 20; i++) {
-    const x = 100 + (i * 600) / 20;
-    const y = 200 + Math.sin(i * 0.5) * 5;
+    const x = padding + (i * graphWidth) / 20;
+    const y = height / 2 + Math.sin(i * 0.5) * 5;
     baselinePoints.push({ x, y });
   }
   const baselineD = `M ${baselinePoints.map(p => `${p.x},${p.y}`).join(' L ')}`;
 
-  const handleClose = () => {
-    if (typeof window !== 'undefined' && window.electron) {
-      console.warn('closeWindow method does not exist on window.electron');
+  // Generate animation points with interpolation
+  const generateAnimationPoints = () => {
+    if (points.length < 2) return [points[0]];
+    
+    const animationPoints = [];
+    const steps = 50;
+    
+    for (let i = 0; points.length - 1; i++) {
+      const current = points[i];
+      const next = points[i + 1];
+      
+      for (let step = 0; step < steps; step++) {
+        const progress = step / steps;
+        const x = current.x + (next.x - current.x) * progress;
+        const y = current.y + (next.y - current.y) * progress;
+        animationPoints.push({ x, y });
+      }
     }
-    onClose();
+    
+    animationPoints.push(points[points.length - 1]);
+    return animationPoints;
   };
+
+  const animationPoints = generateAnimationPoints();
 
   return (
     <AnimatePresence>
@@ -62,20 +94,20 @@ export default function ScoringVisualization({ scores, onClose }: ScoringVisuali
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.9, opacity: 0 }}
-          className="bg-background p-8 rounded-3xl border border-border w-[800px]"
+          className="bg-background p-8 rounded-3xl border border-border w-[1400px]"
         >
           <h2 className="text-2xl font-bold mb-6 text-center">Your Focus Journey</h2>
           
-          <div className="relative w-full h-[400px]">
-            <svg width="800" height="400" className="w-full">
+          <div className="relative w-full h-[600px]">
+            <svg width={width} height={height} className="w-full">
               {/* Grid lines */}
               {[...Array(11)].map((_, i) => (
                 <line
                   key={`grid-${i}`}
-                  x1="100"
-                  y1={50 + i * 30}
-                  x2="700"
-                  y2={50 + i * 30}
+                  x1={padding}
+                  y1={50 + i * 50}
+                  x2={width - padding}
+                  y2={50 + i * 50}
                   stroke="rgba(255,255,255,0.1)"
                   strokeDasharray="4 4"
                 />
@@ -85,10 +117,10 @@ export default function ScoringVisualization({ scores, onClose }: ScoringVisuali
               {[10, 9, 8, 7, 6, 5, 4].map((score, i) => (
                 <text
                   key={`score-${score}`}
-                  x="70"
-                  y={50 + i * 50}
+                  x={padding - 20}
+                  y={50 + i * 80}
                   textAnchor="end"
-                  className="text-xs fill-muted-foreground"
+                  className="text-sm fill-muted-foreground"
                 >
                   {score}/10
                 </text>
@@ -136,12 +168,12 @@ export default function ScoringVisualization({ scores, onClose }: ScoringVisuali
                   <circle
                     cx={point.x}
                     cy={point.y}
-                    r="6"
+                    r="8"
                     fill="url(#gradient)"
                   />
                   <text
                     x={point.x}
-                    y={point.y - 15}
+                    y={point.y - 20}
                     textAnchor="middle"
                     className="text-sm fill-current"
                   >
@@ -152,23 +184,23 @@ export default function ScoringVisualization({ scores, onClose }: ScoringVisuali
               
               {/* Animated character */}
               <motion.g
-                style={{
-                  offsetPath: `path("${pathD}")`,
-                  offsetRotate: "0deg"
+                initial={{ x: animationPoints[0]?.x || 0, y: animationPoints[0]?.y || 0 }}
+                animate={{
+                  x: animationPoints.map(p => p.x),
+                  y: animationPoints.map(p => p.y)
                 }}
-                initial={{ offsetDistance: "0%" }}
-                animate={{ offsetDistance: "100%" }}
                 transition={{
                   duration: 2,
                   delay: 0.5,
-                  ease: "linear"
+                  ease: "linear",
+                  times: animationPoints.map((_, i) => i / (animationPoints.length - 1))
                 }}
               >
-                <circle r="10" fill="url(#gradient)" />
+                <circle r="12" fill="url(#gradient)" />
                 <path
-                  d="M-4,-2 Q0,-4 4,-2 M-3,2 Q0,4 3,2"
+                  d="M-5,-2 Q0,-5 5,-2 M-4,2 Q0,5 4,2"
                   stroke="white"
-                  strokeWidth="1.5"
+                  strokeWidth="2"
                   fill="none"
                 />
               </motion.g>
@@ -185,7 +217,16 @@ export default function ScoringVisualization({ scores, onClose }: ScoringVisuali
               )}
             </p>
             <Button 
-              onClick={handleClose}
+              onClick={() => {
+                // First try to close through Electron
+                if (window.electron?.closeWindow) {
+                  window.electron.closeWindow();
+                } else {
+                  console.warn("window.electron is not defined or closeWindow method does not exist");
+                  // Call the onClose callback
+                  onClose();
+                }
+              }}
               className="rounded-xl"
             >
               Close Browser
