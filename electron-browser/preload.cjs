@@ -65,6 +65,9 @@ contextBridge.exposeInMainWorld('electron', {
     titleUpdateCallback = callback
   },
   getPageContent: () => ipcRenderer.invoke('getPageContent'),
+  onNavigate: (callback) => {
+    ipcRenderer.on('page-navigated', (_, data) => callback(data))
+  }
 })
 
 console.log('Preload script completed')

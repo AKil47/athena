@@ -22,7 +22,8 @@ declare global {
       switchTab: (id: string) => Promise<{ success: boolean; error?: string }>,
       closeTab: (id: string) => Promise<{ success: boolean; error?: string }>,
       onTitleUpdate: (callback: ({ viewId, title }: { viewId: string; title: string }) => void) => void,
-      getPageContent: (id: string) => Promise<{ success: boolean; data?: { url: string; title: string; content: string }; error?: string }>
+      getPageContent: (id: string) => Promise<{ success: boolean; data?: { url: string; title: string; content: string }; error?: string }>,
+      onNavigate: (callback: ({ viewId, url }: { viewId: string; url: string }) => void) => void
     }
   }
 }
@@ -298,6 +299,32 @@ export default function BrowserWindow() {
       console.error('Error updating relevancy score:', error)
     }
   }
+
+  useEffect(() => {
+    if (window.electron) {
+      window.electron.onNavigate(({ viewId, url }) => {
+        // Find the tab that navigated
+        const navigatedTab = tabs.find(tab => tab.id === viewId)
+        if (navigatedTab) {
+          // Update the tab's URL, title, and favicon
+          setTabs(currentTabs =>
+            currentTabs.map(tab =>
+              tab.id === viewId
+                ? {
+                    ...tab,
+                    url,
+                    title: new URL(url).hostname, // Set initial title to hostname
+                    favicon: `https://www.google.com/s2/favicons?domain=${new URL(url).hostname}&sz=32`
+                  }
+                : tab
+            )
+          )
+          // Update relevancy score for the navigated tab
+          updateRelevancyScore(viewId)
+        }
+      })
+    }
+  }, [tabs])
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">
