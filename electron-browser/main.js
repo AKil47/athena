@@ -199,21 +199,23 @@ ipcMain.handle('getPageContent', async () => {
   try {
     const title = browserView.webContents.getTitle()
     const pageUrl = browserView.webContents.getURL()
-    // Get only visible text content
+    // Get only visible text content without modifying the original page
     const visibleText = await browserView.webContents.executeJavaScript(`
       (function() {
-        // Remove script and style elements
-        const scripts = document.querySelectorAll('script, style');
-        scripts.forEach(el => el.remove());
+        // Create a clone of the document body to work with
+        const clone = document.body.cloneNode(true);
         
-        // Get visible text
-        return Array.from(document.body.getElementsByTagName('*'))
+        // Remove script and style elements from the clone
+        clone.querySelectorAll('script, style').forEach(el => el.remove());
+        
+        // Get visible text from the clone
+        const visibleText = Array.from(clone.getElementsByTagName('*'))
           .map(element => {
             const style = window.getComputedStyle(element);
             const isVisible = style.display !== 'none' && 
                             style.visibility !== 'hidden' && 
                             style.opacity !== '0';
-            
+
             if (isVisible) {
               return element.innerText;
             }
@@ -223,6 +225,11 @@ ipcMain.handle('getPageContent', async () => {
           .replace(/\\s+/g, ' ')
           .trim()
           .substring(0, 4000); // Limit to first 4000 characters
+        
+        // Clean up
+        clone.remove();
+        
+        return visibleText;
       })()
     `)
     
