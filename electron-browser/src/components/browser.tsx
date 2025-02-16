@@ -15,11 +15,17 @@ import { useRouter } from "next/navigation"
 declare global {
   interface Window {
     electron: {
-      navigateToUrl: (url: string) => Promise<{ success: boolean; error?: string }>
-      resizeBrowserView: (bounds: { x: number; y: number; width: number; height: number }) => void
+      navigateToUrl: (url: string) => Promise<{ success: boolean; title?: string; error?: string }>,
+      resizeBrowserView: (bounds: { x: number; y: number; width: number; height: number }) => void,
+      initializeBrowser: () => Promise<{ success: boolean }>,
+      createTab: (id: string) => Promise<{ success: boolean; error?: string }>,
+      switchTab: (id: string) => Promise<{ success: boolean; error?: string }>,
+      closeTab: (id: string) => Promise<{ success: boolean; error?: string }>,
+      onTitleUpdate: (callback: ({ viewId, title }: { viewId: string; title: string }) => void) => void
     }
   }
 }
+
 
 interface Tab {
   id: string
@@ -30,22 +36,18 @@ interface Tab {
   favicon?: string
 }
 
-const quickLinks = [
-  { icon: Home, title: "Homepage", url: "https://perplexity.ai" },
-  { icon: Bookmark, title: "Bookmarks", url: "https://v0.dev/bookmarks" },
-]
 
 export default function BrowserWindow() {
-  const { userName, userGoal, isAuthenticated } = useUser()
-  const router = useRouter()
 
-  const [url, setUrl] = useState("https://www.perplexity.ai/")
+  // can get the user name and prompt from right here !!!!
+  const { isAuthenticated } = useUser()
+
   const [isSplitView, setIsSplitView] = useState(false)
   const [tabs, setTabs] = useState<Tab[]>([
     {
       id: "1",
-      url: "https://www.perplexity.ai/",
-      title: "Home",
+      url: "https://perplexity.ai",
+      title: "Perplexity AI",
       isActive: true,
       content: "",
     },
@@ -54,7 +56,7 @@ export default function BrowserWindow() {
   const [searchInput, setSearchInput] = useState("")
   const [history] = useState(() => new BrowserHistory())
 
-  const createNewTab = () => {
+  const createNewTab = async () => {
     const newTab: Tab = {
       id: Date.now().toString(),
       url: "about:blank",
@@ -62,11 +64,20 @@ export default function BrowserWindow() {
       isActive: true,
       content: "",
     }
-
-    const updatedTabs = tabs.map((tab) => ({ ...tab, isActive: false }))
-    setTabs([...updatedTabs, newTab])
-    setActiveTab(newTab)
-    setSearchInput("")
+  
+    try {
+      const result = await window.electron.createTab(newTab.id)
+      if (result.success) {
+        const updatedTabs = tabs.map((tab) => ({ ...tab, isActive: false }))
+        setTabs([...updatedTabs, newTab])
+        setActiveTab(newTab)
+        setSearchInput("")
+      } else {
+        console.error("Failed to create tab:", result.error)
+      }
+    } catch (error) {
+      console.error("Error creating tab:", error)
+    }
   }
 
   useEffect(() => {
@@ -89,6 +100,34 @@ export default function BrowserWindow() {
       return () => clearInterval(interval)
     }
   }, [])
+  
+  useEffect(() => {
+    if (window.electron) {
+      window.electron.onTitleUpdate(({ viewId, title }) => {
+        setTabs(currentTabs => 
+          currentTabs.map(tab => {
+            if (tab.isActive) {
+              return {
+                ...tab,
+                title: title || tab.title
+              }
+            }
+            return tab
+          })
+        )
+      })
+    }
+  }, [])
+
+  useEffect(() => {
+    if (isAuthenticated && window.electron) {
+      // Initialize browser first
+      window.electron.initializeBrowser().then(() => {
+        // Then navigate to initial URL
+        navigateToUrl("https://perplexity.ai")
+      })
+    }
+  }, [isAuthenticated])
 
   useEffect(() => {
     if (!isAuthenticated || typeof window === "undefined" || !window.electron) {
@@ -98,11 +137,7 @@ export default function BrowserWindow() {
     const updateBrowserViewBounds = () => {
       const contentElement = document.getElementById("browser-content")
       if (contentElement) {
-        const rect = contentElement.getBoundingClientRect()
 
-        // Calculate the available space
-        // Left sidebar is 80px, right sidebar is 320px
-        // Top navigation is 64px
         const bounds = {
           x: 80, // Width of left sidebar
           y: 64, // Height of top nav
@@ -115,89 +150,105 @@ export default function BrowserWindow() {
     }
 
     window.addEventListener("resize", updateBrowserViewBounds)
-    updateBrowserViewBounds() // Initial resize
+    updateBrowserViewBounds() 
 
     return () => window.removeEventListener("resize", updateBrowserViewBounds)
   }, [isAuthenticated, activeTab])
 
-  const closeTab = (tabId: string) => {
-    if (tabs.length === 1) {
-      createNewTab()
-    }
-
-    const tabIndex = tabs.findIndex((tab) => tab.id === tabId)
-    const newTabs = tabs.filter((tab) => tab.id !== tabId)
-
-    if (activeTab?.id === tabId) {
-      const newActiveTab = newTabs[Math.min(tabIndex, newTabs.length - 1)]
-      setActiveTab(newActiveTab)
-      setTabs(
-        newTabs.map((tab) => ({
-          ...tab,
-          isActive: tab.id === newActiveTab.id,
-        })),
-      )
-    } else {
-      setTabs(newTabs)
+  const closeTab = async (tabId: string) => {
+    try {
+      const result = await window.electron.closeTab(tabId)
+      if (result.success) {
+        if (tabs.length === 1) {
+          createNewTab()
+        } else {
+          const tabIndex = tabs.findIndex((tab) => tab.id === tabId)
+          const newTabs = tabs.filter((tab) => tab.id !== tabId)
+  
+          if (activeTab?.id === tabId) {
+            const newActiveTab = newTabs[Math.min(tabIndex, newTabs.length - 1)]
+            await switchTab(newActiveTab)
+          } else {
+            setTabs(newTabs)
+          }
+        }
+      } else {
+        console.error("Failed to close tab:", result.error)
+      }
+    } catch (error) {
+      console.error("Error closing tab:", error)
     }
   }
 
-  const switchTab = (tab: Tab) => {
-    setActiveTab(tab)
-    setTabs(
-      tabs.map((t) => ({
-        ...t,
-        isActive: t.id === tab.id,
-      })),
-    )
-    setSearchInput(tab.url)
+  const switchTab = async (tab: Tab) => {
+    try {
+      const result = await window.electron.switchTab(tab.id)
+      if (result.success) {
+        setActiveTab(tab)
+        setTabs(
+          tabs.map((t) => ({
+            ...t,
+            isActive: t.id === tab.id,
+          }))
+        )
+        setSearchInput(tab.url)
+      } else {
+        console.error("Failed to switch tab:", result.error)
+      }
+    } catch (error) {
+      console.error("Error switching tab:", error)
+    }
   }
 
-  const navigateToUrl = async (url: string) => {
-    if (!activeTab) return
-
-    let fullUrl = url
+  const navigateToUrl = async (url) => {
+    if (!activeTab) return;
+  
+    let fullUrl = url;
     if (!url.startsWith("http://") && !url.startsWith("https://")) {
-      fullUrl = url.includes(".") ? `https://${url}` : `https://www.google.com/search?q=${encodeURIComponent(url)}`
+      fullUrl = url.includes(".") 
+        ? `https://${url}` 
+        : `https://www.google.com/search?q=${encodeURIComponent(url)}`;
     }
-
+  
     try {
       setTabs(
         tabs.map((tab) =>
-          tab.id === activeTab.id ? { ...tab, url: fullUrl, title: "Loading...", content: "Loading..." } : tab,
-        ),
-      )
-
-      const result = await window.electron.navigateToUrl(fullUrl)
-
+          tab.id === activeTab.id 
+            ? { ...tab, url: fullUrl, title: "Loading...", content: "Loading..." } 
+            : tab
+        )
+      );
+  
+      const result = await window.electron.navigateToUrl(fullUrl);
+  
       if (result.success) {
-        const favicon = `https://www.google.com/s2/favicons?domain=${new URL(fullUrl).hostname}&sz=32`
-
         setTabs(
           tabs.map((tab) =>
             tab.id === activeTab.id
               ? {
-                ...tab,
-                url: fullUrl,
-                title: new URL(fullUrl).hostname,
-                favicon,
-              }
-              : tab,
-          ),
-        )
-
-        setSearchInput(fullUrl)
-        history.push(fullUrl, url)
+                  ...tab,
+                  url: fullUrl,
+                  title: result.title || new URL(fullUrl).hostname,
+                  favicon: `https://www.google.com/s2/favicons?domain=${new URL(fullUrl).hostname}&sz=32`,
+                }
+              : tab
+          )
+        );
+        setSearchInput(fullUrl);
       } else {
-        throw new Error(result.error)
+        throw new Error(result.error);
       }
     } catch (error) {
-      console.error("Navigation error:", error)
+      console.error("Navigation error:", error);
       setTabs(
-        tabs.map((tab) => (tab.id === activeTab.id ? { ...tab, title: "Error", content: "Failed to load page" } : tab)),
-      )
+        tabs.map((tab) =>
+          tab.id === activeTab.id 
+            ? { ...tab, title: "Error", content: `Failed to load page: ${error.message}` } 
+            : tab
+        )
+      );
     }
-  }
+  };
 
   const formatUrl = (url: string) => {
     try {
@@ -207,16 +258,6 @@ export default function BrowserWindow() {
       return url
     }
   }
-
-  const isValidUrl = (url: string) => {
-    try {
-      new URL(url)
-      return true
-    } catch {
-      return false
-    }
-  }
-
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     if (searchInput) {

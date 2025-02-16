@@ -1,19 +1,69 @@
+// preload.cjs
 const { contextBridge, ipcRenderer } = require('electron')
 
 console.log('Preload script starting...')
 
-const electronHandler = {
-  navigateToUrl: (url) => ipcRenderer.invoke('navigateToUrl', url),
-  resizeBrowserView: (bounds) => ipcRenderer.invoke('resizeBrowserView', bounds)
-}
+// Setup title update listener
+let titleUpdateCallback = null
 
-if (process.contextIsolated) {
-  try {
-    contextBridge.exposeInMainWorld('electron', electronHandler)
-    console.log('Electron API exposed successfully')
-  } catch (error) {
-    console.error('Failed to expose Electron API:', error)
+ipcRenderer.on('page-title-updated', (_, data) => {
+  if (titleUpdateCallback) {
+    titleUpdateCallback(data)
   }
-} else {
-  window.electron = electronHandler
-}
+})
+
+contextBridge.exposeInMainWorld('electron', {
+  navigateToUrl: async (url) => {
+    try {
+      return await ipcRenderer.invoke('navigateToUrl', url)
+    } catch (error) {
+      console.error('Navigation error:', error)
+      return { success: false, error: error.message }
+    }
+  },
+  resizeBrowserView: async (bounds) => {
+    try {
+      return await ipcRenderer.invoke('resizeBrowserView', bounds)
+    } catch (error) {
+      console.error('Resize error:', error)
+      return { success: false, error: error.message }
+    }
+  },
+  createTab: async (tabId) => {
+    try {
+      return await ipcRenderer.invoke('createTab', tabId)
+    } catch (error) {
+      console.error('Create tab error:', error)
+      return { success: false, error: error.message }
+    }
+  },
+  switchTab: async (tabId) => {
+    try {
+      return await ipcRenderer.invoke('switchTab', tabId)
+    } catch (error) {
+      console.error('Switch tab error:', error)
+      return { success: false, error: error.message }
+    }
+  },
+  closeTab: async (tabId) => {
+    try {
+      return await ipcRenderer.invoke('closeTab', tabId)
+    } catch (error) {
+      console.error('Close tab error:', error)
+      return { success: false, error: error.message }
+    }
+  },
+  initializeBrowser: async () => {
+    try {
+      return await ipcRenderer.invoke('initializeBrowser')
+    } catch (error) {
+      console.error('Initialize browser error:', error)
+      return { success: false, error: error.message }
+    }
+  },
+  onTitleUpdate: (callback) => {
+    titleUpdateCallback = callback
+  }
+})
+
+console.log('Preload script completed')
