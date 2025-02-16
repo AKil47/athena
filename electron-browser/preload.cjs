@@ -64,6 +64,14 @@ contextBridge.exposeInMainWorld('electron', {
   onTitleUpdate: (callback) => {
     titleUpdateCallback = callback
   },
+  closeWindow: async () => {
+    try {
+      return await ipcRenderer.invoke('closeWindow')
+    } catch (error) {
+      console.error('Close window error:', error)
+      return { success: false, error: error.message }
+    }
+  },
   getPageContent: () => ipcRenderer.invoke('getPageContent'),
   onNavigate: (callback) => {
     ipcRenderer.on('page-navigated', (_, data) => callback(data))

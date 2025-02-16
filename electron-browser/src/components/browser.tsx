@@ -2,16 +2,17 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { Search, Home, Bookmark, Settings, Layout, Plus, ChevronLeft, ChevronRight, X, Globe } from "lucide-react"
+import { Home, Trophy, Layout, Plus, ChevronLeft, ChevronRight, X, Globe, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator"
-import { BrowserHistory } from "@/components/browserHistory"
+import { BrowserHistory } from "./browserHistory"
 import { useUser } from "@/lib/userContext"
-import RelevancyEngine  from "@/lib/get_relevancy"
+import RelevancyEngine from "@/lib/get_relevancy"
+import BrowserCloseHandler from "./browser-close-handler"
+import { useRouter } from "next/navigation"
 
-// Extend the Window interface to include the electron property
+// Extend Window interface for Electron
 declare global {
   interface Window {
     electron: {
@@ -28,7 +29,6 @@ declare global {
   }
 }
 
-
 interface Tab {
   id: string
   url: string
@@ -39,11 +39,10 @@ interface Tab {
   relevancyScore?: number
 }
 
-
 export default function BrowserWindow() {
-  // Move the useUser hook call to the component level
+  const router = useRouter()
   const { isAuthenticated, userGoal } = useUser()
-
+  const [lastActiveTab, setLastActiveTab] = useState<Tab | null>(null)
   const [isSplitView, setIsSplitView] = useState(false)
   const [tabs, setTabs] = useState<Tab[]>([
     {
@@ -59,30 +58,14 @@ export default function BrowserWindow() {
   const [history] = useState(() => new BrowserHistory())
   const [relevancyDebounceMap] = useState(new Map())
 
-  const createNewTab = async () => {
-    const newTab: Tab = {
-      id: Date.now().toString(),
-      url: "about:blank",
-      title: "New Tab",
-      isActive: true,
-      content: "",
+  // Store last active tab when switching
+  useEffect(() => {
+    if (activeTab) {
+      setLastActiveTab(activeTab)
     }
+  }, [activeTab])
 
-    try {
-      const result = await window.electron.createTab(newTab.id)
-      if (result.success) {
-        const updatedTabs = tabs.map((tab) => ({ ...tab, isActive: false }))
-        setTabs([...updatedTabs, newTab])
-        setActiveTab(newTab)
-        setSearchInput("")
-      } else {
-        console.error("Failed to create tab:", result.error)
-      }
-    } catch (error) {
-      console.error("Error creating tab:", error)
-    }
-  }
-
+  // Initialize Electron API
   useEffect(() => {
     const checkElectronApi = () => {
       if (typeof window !== "undefined" && window.electron) {
@@ -104,16 +87,14 @@ export default function BrowserWindow() {
     }
   }, [])
 
+  // Title update handler
   useEffect(() => {
     if (window.electron) {
       window.electron.onTitleUpdate(({ viewId, title }) => {
         setTabs(currentTabs =>
           currentTabs.map(tab => {
             if (tab.isActive) {
-              return {
-                ...tab,
-                title: title || tab.title
-              }
+              return { ...tab, title: title || tab.title }
             }
             return tab
           })
@@ -122,16 +103,16 @@ export default function BrowserWindow() {
     }
   }, [])
 
+  // Initialize browser and navigate to initial URL
   useEffect(() => {
     if (isAuthenticated && window.electron) {
-      // Initialize browser first
       window.electron.initializeBrowser().then(() => {
-        // Then navigate to initial URL
         navigateToUrl("https://perplexity.ai")
       })
     }
   }, [isAuthenticated])
 
+  // Browser view resize handler
   useEffect(() => {
     if (!isAuthenticated || typeof window === "undefined" || !window.electron) {
       return
@@ -140,14 +121,12 @@ export default function BrowserWindow() {
     const updateBrowserViewBounds = () => {
       const contentElement = document.getElementById("browser-content")
       if (contentElement) {
-
         const bounds = {
-          x: 80, // Width of left sidebar
-          y: 64, // Height of top nav
-          width: window.innerWidth - 80 - 320, // Full width minus both sidebars
-          height: window.innerHeight - 64, // Full height minus top nav
+          x: 80,
+          y: 64,
+          width: window.innerWidth - 80 - 320,
+          height: window.innerHeight - 64,
         }
-
         window.electron.resizeBrowserView(bounds)
       }
     }
@@ -158,59 +137,44 @@ export default function BrowserWindow() {
     return () => window.removeEventListener("resize", updateBrowserViewBounds)
   }, [isAuthenticated, activeTab])
 
-  const closeTab = async (tabId: string) => {
-    try {
-      const result = await window.electron.closeTab(tabId)
-      if (result.success) {
-        if (tabs.length === 1) {
-          createNewTab()
-        } else {
-          const tabIndex = tabs.findIndex((tab) => tab.id === tabId)
-          const newTabs = tabs.filter((tab) => tab.id !== tabId)
-
-          if (activeTab?.id === tabId) {
-            const newActiveTab = newTabs[Math.min(tabIndex, newTabs.length - 1)]
-            await switchTab(newActiveTab)
-          } else {
-            setTabs(newTabs)
-          }
-        }
-      } else {
-        console.error("Failed to close tab:", result.error)
-      }
-    } catch (error) {
-      console.error("Error closing tab:", error)
+  const handleHomeClick = () => {
+    if (lastActiveTab) {
+      switchTab(lastActiveTab)
     }
   }
 
-  const switchTab = async (tab: Tab) => {
+  const updateRelevancyScore = async (tabId: string) => {
     try {
-      const result = await window.electron.switchTab(tab.id)
-      if (result.success) {
-        setActiveTab(tab)
-        setTabs(
-          tabs.map((t) => ({
-            ...t,
-            isActive: t.id === tab.id,
-          }))
+      const result = await window.electron.getPageContent()
+      if (result.success && result.data) {
+        const { url, title, content } = result.data
+        const score = await relevancyEngine.get_relevancy_score(
+          userGoal,
+          url,
+          title,
+          content,
+          relevancyEngine.previousRelevancyScores
         )
-        setSearchInput(tab.url)
-      } else {
-        console.error("Failed to switch tab:", result.error)
+
+        setTabs(currentTabs =>
+          currentTabs.map(tab =>
+            tab.id === tabId ? { ...tab, relevancyScore: score } : tab
+          )
+        )
       }
     } catch (error) {
-      console.error("Error switching tab:", error)
+      console.error('Error updating relevancy score:', error)
     }
   }
 
-  const navigateToUrl = async (url) => {
-    if (!activeTab) return;
+  const navigateToUrl = async (url: string) => {
+    if (!activeTab) return
 
-    let fullUrl = url;
+    let fullUrl = url
     if (!url.startsWith("http://") && !url.startsWith("https://")) {
       fullUrl = url.includes(".")
         ? `https://${url}`
-        : `https://www.google.com/search?q=${encodeURIComponent(url)}`;
+        : `https://www.google.com/search?q=${encodeURIComponent(url)}`
     }
 
     try {
@@ -220,9 +184,9 @@ export default function BrowserWindow() {
             ? { ...tab, url: fullUrl, title: "Loading...", content: "Loading..." }
             : tab
         )
-      );
+      )
 
-      const result = await window.electron.navigateToUrl(fullUrl);
+      const result = await window.electron.navigateToUrl(fullUrl)
 
       if (result.success) {
         setTabs(
@@ -236,27 +200,151 @@ export default function BrowserWindow() {
               }
               : tab
           )
-        );
-        setSearchInput(fullUrl);
+        )
+        setSearchInput(fullUrl)
+        await updateRelevancyScore(activeTab.id)
+        history.push(fullUrl, result.title || new URL(fullUrl).hostname)
       } else {
-        throw new Error(result.error);
+        throw new Error(result.error)
       }
     } catch (error) {
-      console.error("Navigation error:", error);
+      console.error("Navigation error:", error)
       setTabs(
         tabs.map((tab) =>
           tab.id === activeTab.id
             ? { ...tab, title: "Error", content: `Failed to load page: ${error.message}` }
             : tab
         )
-      );
+      )
     }
-  };
+  }
+
+  const createNewTab = async () => {
+    const newTab: Tab = {
+      id: Date.now().toString(),
+      url: "about:blank",
+      title: "New Tab",
+      isActive: true,
+      content: "",
+    }
+
+    try {
+      const result = await window.electron.createTab(newTab.id)
+      if (result.success) {
+        setTabs((prevTabs) => [...prevTabs.map(tab => ({ ...tab, isActive: false })), newTab])
+        setActiveTab(newTab)
+        setSearchInput("")
+      }
+    } catch (error) {
+      console.error("Error creating tab:", error)
+    }
+  }
+
+  const closeTab = async (id: string) => {
+    try {
+      const result = await window.electron.closeTab(id)
+      if (result.success) {
+        if (tabs.length === 1) {
+          createNewTab()
+        } else {
+          const index = tabs.findIndex((tab) => tab.id === id)
+          const newTabs = tabs.filter((tab) => tab.id !== id)
+
+          if (activeTab?.id === id) {
+            const newActiveTab = newTabs[Math.min(index, newTabs.length - 1)]
+            await switchTab(newActiveTab)
+          }
+          setTabs(newTabs)
+        }
+      }
+    } catch (error) {
+      console.error("Error closing tab:", error)
+    }
+  }
+
+  const switchTab = async (tab: Tab) => {
+    try {
+      const result = await window.electron.switchTab(tab.id)
+      if (result.success) {
+        setActiveTab(tab)
+        setTabs(tabs.map((t) => ({ ...t, isActive: t.id === tab.id })))
+        setSearchInput(tab.url)
+      }
+    } catch (error) {
+      console.error("Error switching tab:", error)
+    }
+  }
+
+  const handleLeaderboardClick = async () => {
+    // Save current tab state
+    if (activeTab) {
+      localStorage.setItem('lastActiveTab', JSON.stringify({
+        id: activeTab.id,
+        url: activeTab.url,
+        title: activeTab.title,
+        content: activeTab.content,
+        favicon: activeTab.favicon,
+        relevancyScore: activeTab.relevancyScore
+      }))
+    }
+
+    // Hide browser view before navigation
+    if (window.electron) {
+      const bounds = {
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0
+      }
+      await window.electron.resizeBrowserView(bounds)
+    }
+
+    router.push("/leaderboard")
+  }
+
+
+  useEffect(() => {
+    const savedTab = localStorage.getItem('lastActiveTab')
+    if (savedTab) {
+      const parsedTab = JSON.parse(savedTab)
+      // Only restore if the tab still exists
+      const existingTab = tabs.find(tab => tab.id === parsedTab.id)
+      if (existingTab) {
+        switchTab(existingTab)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    // Restore browser view when component mounts
+    const updateBrowserViewBounds = () => {
+      if (!window.electron) return
+
+      const contentElement = document.getElementById("browser-content")
+      if (contentElement) {
+        const bounds = {
+          x: 80,
+          y: 64,
+          width: window.innerWidth - 80 - 320,
+          height: window.innerHeight - 64,
+        }
+        window.electron.resizeBrowserView(bounds)
+      }
+    }
+
+    updateBrowserViewBounds()
+  }, [])
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (searchInput.trim() === "") return
+    navigateToUrl(searchInput)
+  }
 
   const formatUrl = (url: string) => {
     try {
-      const urlObj = new URL(url)
-      return urlObj.hostname + urlObj.pathname
+      const parsedUrl = new URL(url)
+      return parsedUrl.hostname
     } catch {
       return url
     }
@@ -343,19 +431,18 @@ export default function BrowserWindow() {
         <Button
           variant="ghost"
           size="lg"
+          onClick={handleHomeClick}
           className="rounded-2xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
         >
           <Home className="h-6 w-6" />
         </Button>
-        <Button variant="ghost" size="lg" className="rounded-2xl hover:bg-white/5 transition-colors">
-          <Search className="h-6 w-6" />
-        </Button>
-        <Button variant="ghost" size="lg" className="rounded-2xl hover:bg-white/5 transition-colors">
-          <Bookmark className="h-6 w-6" />
-        </Button>
-        <Separator className="my-2 w-10 bg-white/10" />
-        <Button variant="ghost" size="lg" className="rounded-2xl mt-auto hover:bg-white/5 transition-colors">
-          <Settings className="h-6 w-6" />
+        <Button
+          variant="ghost"
+          size="lg"
+          onClick={handleLeaderboardClick}
+          className="rounded-2xl hover:bg-white/5 transition-colors"
+        >
+          <Trophy className="h-6 w-6" />
         </Button>
       </div>
 
@@ -412,8 +499,7 @@ export default function BrowserWindow() {
             {tabs.map((tab) => (
               <div
                 key={tab.id}
-                className={`absolute inset-0 transition-opacity ${tab.isActive ? "opacity-100 z-10" : "opacity-0 z-0"
-                  }`}
+                className={`absolute inset-0 transition-opacity ${tab.isActive ? "opacity-100 z-10" : "opacity-0 z-0"}`}
               >
                 <div id="browser-content" className="absolute inset-0" />
               </div>
@@ -434,8 +520,9 @@ export default function BrowserWindow() {
               {tabs.map((tab) => (
                 <div
                   key={tab.id}
+                  data-relevancy-score={tab.relevancyScore}
                   className={`group flex items-center p-3 rounded-xl cursor-pointer transition-colors
-          ${tab.isActive ? "bg-white/10" : "hover:bg-white/5"}`}
+                    ${tab.isActive ? "bg-white/10" : "hover:bg-white/5"}`}
                   onClick={() => switchTab(tab)}
                 >
                   <div className="flex items-center flex-1 min-w-0">
@@ -456,10 +543,11 @@ export default function BrowserWindow() {
                       <div className="font-medium truncate">
                         {tab.title}
                         {tab.relevancyScore !== undefined && (
-                          <span className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${tab.relevancyScore >= 7 ? "bg-green-500/20 text-green-300" :
+                          <span
+                            className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${tab.relevancyScore >= 7 ? "bg-green-500/20 text-green-300" :
                               tab.relevancyScore >= 4 ? "bg-yellow-500/20 text-yellow-300" :
                                 "bg-red-500/20 text-red-300"
-                            }`}>
+                              }`}>
                             {tab.relevancyScore}/10
                           </span>
                         )}
@@ -486,6 +574,7 @@ export default function BrowserWindow() {
           </ScrollArea>
         </div>
       </div>
+      <BrowserCloseHandler />
     </div>
   )
 }

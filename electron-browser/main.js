@@ -105,6 +105,20 @@ app.on('window-all-closed', () => {
   }
 })
 
+ipcMain.handle('closeWindow', () => {
+  if (!mainWindow) {
+    return { success: false, error: 'Window not found' }
+  }
+  
+  try {
+    mainWindow.close()
+    return { success: true }
+  } catch (error) {
+    console.error('Error closing window:', error)
+    return { success: false, error: error.message }
+  }
+});
+
 // Tab management handlers
 ipcMain.handle('createTab', (event, tabId) => {
   try {
